@@ -875,44 +875,57 @@ def frequency_to_xml(parent, obj):
 
 
 def handle_objectInteraction(kwargs, el):
-    objectInteraction = kwargs.setdefault("audioObjectInteraction", AudioObjectInteraction())
-    objectInteraction.gainInteract = el.attrib["gainInteract"]
-    objectInteraction.onOffInteract = el.attrib["onOffInteract"]
-    objectInteraction.positionInteract = el.attrib["positionInteract"]
+    aoi_kwargs = {}
+    if "gainInteract" not in el.attrib:
+        raise ValueError("audioObjectInteraction elements require a gainInteract attribute")
+    for name in "gainInteract", "onOffInteract", "positionInteract":
+        if name in el.attrib:
+            aoi_kwargs[name] = BoolType.loads(el.attrib[name])
 
-    objectInteraction.gainInteractionRange = GainInteractionRange()
-    objectInteraction.positionInteractionRange = PositionInteractionRange()
-    for element in el.getiterator():
-        if element.tag == "{urn:ebu:metadata-schema:ebuCore_2017}gainInteractionRange":
-            if element.attrib['bound'] == 'min':
-                objectInteraction.gainInteractionRange.min = float(element.text)
-            else:
-                objectInteraction.gainInteractionRange.max = float(element.text)
-        elif element.tag == "{urn:ebu:metadata-schema:ebuCore_2017}positionInteractionRange":
-            if element.attrib['coordinate'] == 'azimuth' and element.attrib['bound'] == 'min':
-                objectInteraction.positionInteractionRange.azimuthMin = float(element.text)
-            elif element.attrib['coordinate'] == 'azimuth' and element.attrib['bound'] == 'max':
-                objectInteraction.positionInteractionRange.azimuthMax = float(element.text)
-            elif element.attrib['coordinate'] == 'elevation' and element.attrib['bound'] == 'min':
-                objectInteraction.positionInteractionRange.elevationMin = float(element.text)
-            elif element.attrib['coordinate'] == 'elevation' and element.attrib['bound'] == 'max':
-                objectInteraction.positionInteractionRange.elevationMax = float(element.text)
-            elif element.attrib['coordinate'] == 'distance' and element.attrib['bound'] == 'min':
-                objectInteraction.positionInteractionRange.distanceMin = float(element.text)
-            elif element.attrib['coordinate'] == 'distance' and element.attrib['bound'] == 'max':
-                objectInteraction.positionInteractionRange.distanceMax = float(element.text)
-            elif element.attrib['coordinate'] == 'X' and element.attrib['bound'] == 'min':
-                objectInteraction.positionInteractionRange.XMin = float(element.text)
-            elif element.attrib['coordinate'] == 'X' and element.attrib['bound'] == 'max':
-                objectInteraction.positionInteractionRange.XMax = float(element.text)
-            elif element.attrib['coordinate'] == 'Y' and element.attrib['bound'] == 'min':
-                objectInteraction.positionInteractionRange.YMin = float(element.text)
-            elif element.attrib['coordinate'] == 'Y' and element.attrib['bound'] == 'max':
-                objectInteraction.positionInteractionRange.YMax = float(element.text)
-            elif element.attrib['coordinate'] == 'Z' and element.attrib['bound'] == 'min':
-                objectInteraction.positionInteractionRange.ZMin = float(element.text)
-            elif element.attrib['coordinate'] == 'Z' and element.attrib['bound'] == 'max':
-                objectInteraction.positionInteractionRange.ZMax = float(element.text)
+    gain_interaction_kwargs = {}
+    gain_elements = {
+        "min" : "min",
+        "max" : "max",
+    }
+    for element in xpath(el, "{ns}gainInteractionRange"):
+        bound = element.attrib.get("bound")
+        if bound is None:
+            raise ValueError("gainInteractionRange element must have a bound attribute")
+        if bound not in gain_elements:
+            raise ValueError("gainInteractionRange element has unknown bound {bound}".format(bound=bound))
+        attr = gain_elements[bound]
+        if attr in gain_interaction_kwargs:
+            raise ValueError("bound {bound} specified more than once in gainInteractionRange".format(bound=bound))
+        gain_interaction_kwargs[attr] = FloatType.loads(element.text)
+
+    aoi_kwargs["gainInteractionRange"] = GainInteractionRange(**gain_interaction_kwargs)
+
+    pos_interaction_kwargs = {}
+    pos_elements = {
+        (coordinate, bound) : coordinate + bound.capitalize()
+        for coordinate in ["azimuth", "elevation", "distance", "X", "Y", "Z"]
+        for bound in ["min", "max"]
+    }
+    for element in xpath(el, "{ns}positionInteractionRange"):
+        coordinate = element.attrib.get("coordinate")
+        bound = element.attrib.get("bound")
+        if bound is None:
+            raise ValueError("positionInteractionRange element must have a bound attribute")
+        if coordinate is None:
+            raise ValueError("positionInteractionRange element must have a coordinate attribute")
+        if (coordinate, bound) not in pos_elements:
+            raise ValueError("positionInteractionRange element has unknown coordinate {coordinate} and bound {bound}".format(
+                coordinate=coordinate, bound=bound))
+        attr = pos_elements[(coordinate, bound)]
+        if attr in pos_interaction_kwargs:
+            raise ValueError("bound {bound} and coordinate {coordinate} specified more than once in positionInteractionRange".format(
+                coordinate=coordinate, bound=bound))
+        pos_interaction_kwargs[attr] = FloatType.loads(element.text)
+
+    aoi_kwargs["positionInteractionRange"] = PositionInteractionRange(**pos_interaction_kwargs)
+
+    kwargs["audioObjectInteraction"] = AudioObjectInteraction(**aoi_kwargs)
+
 
 def objectInteraction_to_xml(parent, obj):
     print(parent)
